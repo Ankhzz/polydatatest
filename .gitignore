@@ -1,0 +1,15 @@
+# Ignorar archivos de caché de Node.js
+node_modules/
+
+# Ignorar archivos de configuración locales
+.env
+.local
+
+# Ignorar archivos temporales y de respaldo
+*.swp
+*.tmp
+*~
+
+# Ignorar archivos de configuración de editores
+.idea
+.vscode

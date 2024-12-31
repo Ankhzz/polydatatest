@@ -1,0 +1,76 @@
+/* General */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+}
+
+h1 {
+    color: #333;
+    font-size: 24px;
+}
+
+h2 {
+    color: #444;
+    font-size: 20px;
+    margin-top: 20px;
+}
+
+/* Botones */
+button {
+    padding: 12px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    margin: 10px 0;
+    border: none;
+    border-radius: 5px;
+}
+
+.btn-green {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-green:hover {
+    background-color: #45a049;
+}
+
+/* Contenedor de métricas */
+.metrics-container {
+    margin-top: 20px;
+    text-align: left;
+    font-size: 16px;
+    color: #555;
+}
+
+.metrics-container p {
+    margin: 8px 0;
+    font-weight: bold;
+}
+
+.metrics-container span {
+    font-weight: normal;
+    color: #333;
+}
+
+/* Estilo de alertas */
+.alert {
+    color: red;
+    font-size: 14px;
+    margin-top: 10px;
+}
