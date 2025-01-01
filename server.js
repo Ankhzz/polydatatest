@@ -1,49 +1,21 @@
-// Proyecto: Frame para Warpcast con métricas de Polygon PoS
-// Tecnologías: Express.js, ethers.js, dotenv, axios
-
 require('dotenv').config();
 const { ethers, BigNumber } = require('ethers');
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const moment = require('moment');  // Para manejar fechas
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-// 1. Configuración de conexión con Polygon
 const provider = new ethers.providers.JsonRpcProvider(process.env.POLYGON_RPC_URL);
 
-// 2. Endpoints para la aplicación
-// Ruta para la raíz del servidor
 app.get('/', (req, res) => {
-    res.send('Bienvenido al Frame para Warpcast con métricas de Polygon PoS');
+    res.send('Bienvenido al servidor para métricas de Polygon PoS');
 });
 
-// Autenticación básica
-app.post('/auth', async (req, res) => {
-    const { address, handle } = req.body;
-    if (!address || !handle) return res.status(400).json({ error: 'Faltan datos' });
-
-    res.json({ message: 'Usuario autenticado', address, handle });
-});
-
-// Guardar métricas (simulado en memoria)
-let metricsStorage = {};
-
-app.post('/metrics', async (req, res) => {
-    const { address, interactions, polSpent, usdSpent } = req.body;
-
-    if (!address || interactions == null || polSpent == null || usdSpent == null) {
-        return res.status(400).json({ error: 'Faltan datos' });
-    }
-
-    metricsStorage[address] = { interactions, polSpent, usdSpent };
-    res.json({ message: 'Métricas guardadas correctamente', data: metricsStorage[address] });
-});
-
-// Obtener métricas de Polygon
 app.get('/metrics/polygon/:address', async (req, res) => {
     const { address } = req.params;
 
@@ -61,46 +33,66 @@ app.get('/metrics/polygon/:address', async (req, res) => {
         });
 
         const transactions = response.data.result;
-        let totalGas = BigNumber.from(0); // Usamos BigNumber para mantener la precisión
-        let totalTransferred = BigNumber.from(0); // Variable para el total de MATIC transferido
-        let totalReceived = BigNumber.from(0); // Variable para acumular el POL recibido
+        let totalGas = BigNumber.from(0);
+        let totalSpent = BigNumber.from(0);
+        let totalReceived = BigNumber.from(0);
+        let lastTxDate = null;
 
         transactions.forEach(tx => {
+            // Excluir transacciones fallidas
+            if (tx.isError === "1") {
+                console.log(`Transacción fallida excluida: ${tx.hash}`);
+                return;
+            }
+
             const gasUsed = BigNumber.from(tx.gasUsed);
             const gasPrice = BigNumber.from(tx.gasPrice);
-            const gasSpentInWei = gasUsed.mul(gasPrice);
-            totalGas = totalGas.add(gasSpentInWei);
-        
-            if (tx.value) {
-                const valueInWei = BigNumber.from(tx.value);
-                totalTransferred = totalTransferred.add(valueInWei);
-        
-                // Verificar si la transacción fue enviada a nuestra dirección
-                if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
-                    totalReceived = totalReceived.add(valueInWei); // Acumular POL recibido
-                }
+            const gasCost = gasUsed.mul(gasPrice);
+            totalGas = totalGas.add(gasCost);
+
+            const valueInWei = BigNumber.from(tx.value);
+
+            if (tx.from.toLowerCase() === address.toLowerCase()) {
+                totalSpent = totalSpent.add(valueInWei.add(gasCost)); // Incluir gas en el gasto total
+            }
+
+            if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
+                totalReceived = totalReceived.add(valueInWei);
+            }
+
+            // Guardar la fecha de la última transacción
+            if (!lastTxDate || moment(tx.timeStamp * 1000).isAfter(lastTxDate)) {
+                lastTxDate = moment(tx.timeStamp * 1000); // Convertir timestamp a fecha
             }
         });
 
-        // Convertimos de Wei a Ether
+        const balanceWei = await provider.getBalance(address);
+        const balanceEther = ethers.utils.formatUnits(balanceWei, 'ether');
+        
+        // Cálculo de POL Spent
         const totalGasInEther = ethers.utils.formatUnits(totalGas, 'ether');
-        const totalTransferredInEther = ethers.utils.formatUnits(totalTransferred, 'ether');
+        const totalSpentInEther = ethers.utils.formatUnits(totalSpent, 'ether');
         const totalReceivedInEther = ethers.utils.formatUnits(totalReceived, 'ether');
+        const polSpent = parseFloat(totalSpentInEther) - parseFloat(totalReceivedInEther) - parseFloat(balanceEther);
 
-        // Obtenemos el precio en USD
-        const usdReceived = parseFloat(totalReceivedInEther) * (await getPolToUsd());        
-        const usdSpent = parseFloat(totalGasInEther) * (await getPolToUsd());
-        const usdTransferred = parseFloat(totalTransferredInEther) * (await getPolToUsd());
+        // Cálculo del gas promedio
+        const averageGasUsed = totalGas.div(transactions.length).toString();
 
-       
-        res.json({ 
-            address, 
-            totalGasSpent: totalGasInEther, 
-            totalTransferred: totalTransferredInEther, 
-            totalTransactions: transactions.length, 
-            totalReceived: totalReceivedInEther,  // Agregar total recibido          
-            usdSpent,
-            usdTransferred
+        // Rango de actividad (transacciones en la última semana)
+        const oneWeekAgo = moment().subtract(7, 'days');
+        const recentTxs = transactions.filter(tx => moment(tx.timeStamp * 1000).isAfter(oneWeekAgo));
+        const activityRange = recentTxs.length;
+
+        // Respuesta final
+        res.json({
+            address,
+            totalTransactions: transactions.length,
+            polSpent: polSpent.toFixed(2),
+            polReceived: parseFloat(totalReceivedInEther).toFixed(2),
+            gasSpent: parseFloat(totalGasInEther).toFixed(8),
+            lastActivity: lastTxDate ? lastTxDate.format('YYYY-MM-DD HH:mm:ss') : 'N/A',
+            averageGasUsed: ethers.utils.formatUnits(averageGasUsed, 'ether'),
+            activityRange,
         });
     } catch (err) {
         console.error(err);
@@ -108,18 +100,4 @@ app.get('/metrics/polygon/:address', async (req, res) => {
     }
 });
 
-// Utilidad para obtener el precio de POL en USD
-async function getPolToUsd() {
-    try {
-        const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
-            params: { ids: 'matic-network', vs_currencies: 'usd' },
-        });
-        return response.data['matic-network'].usd;
-    } catch (err) {
-        console.error(err);
-        return 0;
-    }
-}
-
-// 3. Inicio del servidor
 app.listen(PORT, () => console.log(`Servidor ejecutándose en http://localhost:${PORT}`));

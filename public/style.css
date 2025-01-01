@@ -1,7 +1,9 @@
 /* General */
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f4f9;
+    background-color: #6d20d1;
+    background-image: url(https://i.ebayimg.com/images/g/n8IAAOSwltRkNCSF/s-l1200.png);
+    background-blend-mode: soft-light;
     margin: 0;
     padding: 0;
     display: flex;
